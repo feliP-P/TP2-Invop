@@ -110,19 +110,75 @@ def agregar_variables(prob, instancia):
     )
 
 def agregar_restricciones(prob, instancia):
-    # Agregar las restricciones ax <= (>= ==) b:
-	# funcion 'add' de 'linear_constraints' con parametros:
-	# lin_expr: lista de listas de [ind,val] de a
-    # sense: lista de 'L', 'G' o 'E'
-    # rhs: lista de los b
-    # names: nombre (como van a aparecer en el archivo .lp)
+    n = instancia.cantidad_clientes
+    dmax = instancia.d_max
+    refrigerados = set(instancia.refrigerados)
+    exclusivos = set(instancia.exclusivos)
 
-    # Notar que cplex espera "una matriz de restricciones", es decir, una
-    # lista de restricciones del tipo ax <= b, [ax <= b]. Por lo tanto, aun cuando
-    # agreguemos una unica restriccion, tenemos que hacerlo como una lista de un unico
-    # elemento.
+    # 1. Cada cliente debe ser atendido (por camión o repartidor)
+    for j in range(n):
+        ind = [prob.variables.get_indices(f"y_{j}")]
+        val = [1]
 
-    ...........
+        for i in range(n):
+            if i != j and instancia.distancias[i][j] <= dmax:
+                try:
+                    ind.append(prob.variables.get_indices(f"z_{i}_{j}"))
+                    val.append(1)
+                except:
+                    pass  # z_{i,j} no está definida porque dist > dmax
+
+        prob.linear_constraints.add(
+            lin_expr=[cplex.SparsePair(ind=ind, val=val)],
+            senses=["E"],
+            rhs=[1],
+            names=[f"atencion_cliente_{j}"]
+        )
+
+    # 2. Si hay un z_{i,j} activo, entonces y_i debe ser 1 (i.e., repartidor solo sale de la parada del camión)
+    for i in range(n):
+        for j in range(n):
+            if i != j and instancia.distancias[i][j] <= dmax:
+                try:
+                    z_idx = prob.variables.get_indices(f"z_{i}_{j}")
+                    y_idx = prob.variables.get_indices(f"y_{i}")
+                    prob.linear_constraints.add(
+                        lin_expr=[cplex.SparsePair(ind=[z_idx, y_idx], val=[1, -1])],
+                        senses=["L"],
+                        rhs=[0],
+                        names=[f"repartidor_desde_parada_{i}_{j}"]
+                    )
+                except:
+                    pass
+
+    # 3. Refrigerados: como máximo 1 cliente refrigerado a pie/bici por parada
+    for i in range(n):
+        ind = []
+        for j in refrigerados:
+            if i != j and instancia.distancias[i][j] <= dmax:
+                try:
+                    ind.append(prob.variables.get_indices(f"z_{i}_{j}"))
+                except:
+                    pass
+        if ind:
+            prob.linear_constraints.add(
+                lin_expr=[cplex.SparsePair(ind=ind, val=[1] * len(ind))],
+                senses=["L"],
+                rhs=[1],
+                names=[f"max_refrigerado_{i}"]
+            )
+
+    # 4. Clientes que deben ser visitados por el camión
+    for i in exclusivos:
+        idx = prob.variables.get_indices(f"y_{i}")
+        prob.linear_constraints.add(
+            lin_expr=[cplex.SparsePair(ind=[idx], val=[1])],
+            senses=["E"],
+            rhs=[1],
+            names=[f"camion_visita_exclusivo_{i}"]
+        )
+
+    # 5 Falta: Queremos asegurar que cada repartidor a pie/bici contratado realice al menos 4 entregas
 
 def armar_lp(prob, instancia):
 
