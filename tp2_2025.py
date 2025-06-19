@@ -101,6 +101,14 @@ def agregar_variables(prob, instancia):
                 lb.append(0.0)
                 ub.append(1.0)
 
+    # r_i: si hay un repartidor saliendo de i
+    for i in range(n):
+        nombres.append(f"r_{i}")
+        costos.append(0.0)  # sin costo adicional por contratar repartidor
+        tipos.append("B")
+        lb.append(0.0)
+        ub.append(1.0)
+
     prob.variables.add(
         obj=costos,
         lb=lb,
@@ -178,7 +186,46 @@ def agregar_restricciones(prob, instancia):
             names=[f"camion_visita_exclusivo_{i}"]
         )
 
-    # 5 Falta: Queremos asegurar que cada repartidor a pie/bici contratado realice al menos 4 entregas
+   # 5. Si se contrata un repartidor en i, debe hacer al menos 4 entregas
+    for i in range(n):
+        ind = []
+        val = []
+
+        for j in range(n):
+            if i != j and instancia.distancias[i][j] <= dmax:
+                try:
+                    ind.append(prob.variables.get_indices(f"z_{i}_{j}"))
+                    val.append(1)
+                except:
+                    pass
+
+        if ind:
+            try:
+                r_idx = prob.variables.get_indices(f"r_{i}")
+                ind.append(r_idx)
+                val.append(-4)
+                prob.linear_constraints.add(
+                    lin_expr=[cplex.SparsePair(ind=ind, val=val)],
+                    senses=["G"],
+                    rhs=[0],
+                    names=[f"min_4_entregas_r_{i}"]
+                )
+            except:
+                pass
+
+    # 6. Solo puede haber repartidor si el camión paró
+    for i in range(n):
+        try:
+            r_idx = prob.variables.get_indices(f"r_{i}")
+            y_idx = prob.variables.get_indices(f"y_{i}")
+            prob.linear_constraints.add(
+                lin_expr=[cplex.SparsePair(ind=[r_idx, y_idx], val=[1, -1])],
+                senses=["L"],
+                rhs=[0],
+                names=[f"repartidor_si_camion_para_{i}"]
+            )
+        except:
+            pass
 
 def armar_lp(prob, instancia):
 
@@ -195,11 +242,12 @@ def armar_lp(prob, instancia):
     prob.write('recorridoMixto.lp')
 
 def resolver_lp(prob):
-    
-    # Definir los parametros del solver
-    #prob.parameters.mip.....
-       
-    # Resolver el lp
+    # Parámetros del solver (algunos son opcionales)
+    prob.parameters.timelimit.set(60)  # Máximo 60 segundos
+    prob.parameters.mip.tolerances.mipgap.set(0.01)  # 1% de gap
+    prob.parameters.output.writelevel.set(0)  # Silencia la salida
+
+    # Resolver el problema
     prob.solve()
 
 def mostrar_solucion(prob,instancia):
@@ -216,9 +264,14 @@ def mostrar_solucion(prob,instancia):
     
     # Tomar los valores de las variables
     x  = prob.solution.get_values()
+    nombres = prob.variables.get_names()
 
     # Mostrar las variables con valor positivo (mayor que una tolerancia)
-    ..... 
+    print("🔍 Variables activas:")
+
+    for nombre, valor in zip(nombres, x):
+        if valor > TOLERANCE:
+            print(f"  {nombre}: {valor:.1f}")
 
 def main():
     
