@@ -113,15 +113,15 @@ def agregar_restricciones(prob, instancia):
             names=[f"camion_una_vez_{k}"]
         )
 
-    # 3. Bicicleta solo si el cliente fue atendido por camión
+    # 3. Solo se pueden hacer viajes en bici desde k si el camión llegó a k
     for k in range(n):
-        izquierda = [f"VB_{i}_{k}" for i in range(n) if i != k]
-        derecha = [f"VC_{k}_{j}" for j in range(n) if j != k]
+        bici_saliendo = [f"VB_{k}_{j}" for j in range(n) if j != k]
+        camion_llega = [f"VC_{i}_{k}" for i in range(n) if i != k]
         prob.linear_constraints.add(
-            lin_expr=[SparsePair(izquierda + derecha, [1] * len(izquierda) + [-1] * len(derecha))],
+            lin_expr=[SparsePair(bici_saliendo + camion_llega, [1] * len(bici_saliendo) + [-n] * len(camion_llega))],
             senses=["L"],
             rhs=[0],
-            names=[f"bici_si_camion_{k}"]
+            names=[f"bici_desde_k_si_camion_llega_{k}"]
         )
 
     # 4. Distancia máxima bici
@@ -172,6 +172,47 @@ def agregar_restricciones(prob, instancia):
         rhs=[0],
         names=["cantidad_bicis"]
     )
+    # 8. Clientes que deben ser visitados por el camión
+    for j in instancia.exclusivos:
+        nombres = [f"VC_{i}_{j-1}" for i in range(instancia.cant_clientes) if i != (j - 1)]
+        prob.linear_constraints.add(
+            lin_expr=[SparsePair(nombres, [1] * len(nombres))],
+            senses=["G"],  # Mayor o igual que
+            rhs=[1],
+            names=[f"camion_obligatorio_{j}"]
+        )
+    
+    # 9. Cada bici hace a lo sumo 4 viajes
+    nombres = []
+    coefs = []
+
+    for i in range(instancia.cant_clientes):
+        for j in range(instancia.cant_clientes):
+            if i != j:
+                nombres.append(f"VB_{i}_{j}")
+                coefs.append(1)
+
+    nombres.append("cant_bicis")
+    coefs.append(-4)
+
+    prob.linear_constraints.add(
+        lin_expr=[SparsePair(nombres, coefs)],
+        senses=["L"],
+        rhs=[0],
+        names=["max_viajes_bici"]
+    )
+
+    '''# Restriccion de aristas inexistentes
+    for i in range(n):
+        for j in range(n):
+            if i != j and instancia.costos[i][j] >= 1000000:
+                prob.linear_constraints.add(
+                    lin_expr=[SparsePair([f"VC_{i}_{j}"], [1])],
+                    senses=["E"],
+                    rhs=[0],
+                    names=[f"bloquear_arista_{i}_{j}"]
+                )'''
+ 
 
 def agregar_funcion_objetivo(prob, instancia):
     n = instancia.cant_clientes
@@ -230,6 +271,12 @@ def mostrar_solucion(prob,instancia):
 
     # Mostrar las variables con valor positivo (mayor que una tolerancia)
     print("🔍 Variables activas:")
+
+    for nombre, valor in zip(nombres, x):
+        if valor > TOLERANCE and nombre.startswith("VC"):
+            i, j = map(int, nombre[3:].split("_"))
+            costo = instancia.costos[i][j]
+            print(f"{nombre}: {valor:.1f} costo: {costo}")
 
     for nombre, valor in zip(nombres, x):
         if valor > TOLERANCE:
