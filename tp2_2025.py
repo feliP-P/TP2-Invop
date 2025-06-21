@@ -1,6 +1,8 @@
 import sys
 #importamos el modulo cplex
 import cplex
+from cplex import SparsePair
+
 
 TOLERANCE =10e-6 
 
@@ -19,15 +21,15 @@ class InstanciaRecorridoMixto:
         f = open(filename)
 
         # leemos la cantidad de clientes
-        self.cantidad_clientes = int(f.readline())
+        self.cant_clientes = int(f.readline())
         # leemos el costo por pedido del repartidor
         self.costo_repartidor = int(f.readline())
         # leemos la distamcia maxima del repartidor
         self.d_max = int(f.readline())
         
         # inicializamos distancias y costos con un valor muy grande (por si falta algun par en los datos)
-        self.distancias = [[1000000 for _ in range(self.cantidad_clientes)] for _ in range(self.cantidad_clientes)]
-        self.costos = [[1000000 for _ in range(self.cantidad_clientes)] for _ in range(self.cantidad_clientes)]
+        self.distancias = [[1000000 for _ in range(self.cant_clientes)] for _ in range(self.cant_clientes)]
+        self.costos = [[1000000 for _ in range(self.cant_clientes)] for _ in range(self.cant_clientes)]
         
         # leemos la cantidad de refrigerados
         cantidad_refrigerados = int(f.readline())
@@ -63,169 +65,133 @@ def cargar_instancia():
     return instancia
 
 def agregar_variables(prob, instancia):
-    nombres = []
-    costos = []
-    tipos = []
-    lb = []
-    ub = []
+    n = instancia.cant_clientes
+    nombres_vc = []
+    nombres_vb = []
 
-    n = instancia.cantidad_clientes
-    dmax = instancia.d_max
-    costo_rep = instancia.costo_repartidor
-
-    # y_i: si el camión visita al cliente i
-    for i in range(n):
-        nombres.append(f"y_{i}")
-        costos.append(0.0)  # el costo de y_i lo asumimos implícito en x o en z
-        tipos.append("B")
-        lb.append(0.0)
-        ub.append(1.0)
-
-    # x_ij: si el camión va de i a j 
+    # Variables VC y VB
     for i in range(n):
         for j in range(n):
             if i != j:
-                nombres.append(f"x_{i}_{j}")
-                costos.append(instancia.costos[i][j])  # costo del camión
-                tipos.append("B")
-                lb.append(0.0)
-                ub.append(1.0)
+                nombres_vc.append(f"VC_{i}_{j}")
+                nombres_vb.append(f"VB_{i}_{j}")
 
-    # z_ij: si cliente j es atendido por repartidor desde i
-    for i in range(n):
-        for j in range(n):
-            if i != j and instancia.distancias[i][j] <= dmax:
-                nombres.append(f"z_{i}_{j}")
-                costos.append(costo_rep)  # costo por cada entrega a pie/bici
-                tipos.append("B")
-                lb.append(0.0)
-                ub.append(1.0)
+    prob.variables.add(names=nombres_vc, types=['B'] * len(nombres_vc))
+    prob.variables.add(names=nombres_vb, types=['B'] * len(nombres_vb))
 
-    # r_i: si hay un repartidor saliendo de i
-    for i in range(n):
-        nombres.append(f"r_{i}")
-        costos.append(0.0)  # sin costo adicional por contratar repartidor
-        tipos.append("B")
-        lb.append(0.0)
-        ub.append(1.0)
+    # Variable cant_bicis
+    prob.variables.add(names=["cant_bicis"], types=["I"], lb=[0])
 
-    prob.variables.add(
-        obj=costos,
-        lb=lb,
-        ub=ub,
-        types=tipos,
-        names=nombres
-    )
+    # Variables u_i (orden de visita)
+    nombres_u = [f"u_{i}" for i in range(1, n)]
+    prob.variables.add(names=nombres_u, lb=[1.0] * (n - 1), ub=[float(n)] * (n - 1), types=["C"] * (n - 1))
 
 def agregar_restricciones(prob, instancia):
-    n = instancia.cantidad_clientes
-    dmax = instancia.d_max
-    refrigerados = set(instancia.refrigerados)
-    exclusivos = set(instancia.exclusivos)
+    n = instancia.cant_clientes
+    d = instancia.distancias
+    dist_max = instancia.d_max
+    refrigerados = instancia.refrigerados
 
-    # 1. Cada cliente debe ser atendido (por camión o repartidor)
-    for j in range(n):
-        ind = [prob.variables.get_indices(f"y_{j}")]
-        val = [1]
-
-        for i in range(n):
-            if i != j and instancia.distancias[i][j] <= dmax:
-                try:
-                    ind.append(prob.variables.get_indices(f"z_{i}_{j}"))
-                    val.append(1)
-                except:
-                    pass  # z_{i,j} no está definida porque dist > dmax
-
+    # 1. Conservación de flujo del camión
+    for k in range(1, n):
+        entrada = [f"VC_{i}_{k}" for i in range(n) if i != k]
+        salida = [f"VC_{k}_{j}" for j in range(n) if j != k]
         prob.linear_constraints.add(
-            lin_expr=[cplex.SparsePair(ind=ind, val=val)],
+            lin_expr=[SparsePair(entrada + salida, [1] * len(entrada) + [-1] * len(salida))],
             senses=["E"],
-            rhs=[1],
-            names=[f"atencion_cliente_{j}"]
+            rhs=[0],
+            names=[f"flujo_camion_{k}"]
         )
 
-    # 2. Si hay un z_{i,j} activo, entonces y_i debe ser 1 (i.e., repartidor solo sale de la parada del camión)
-    for i in range(n):
-        for j in range(n):
-            if i != j and instancia.distancias[i][j] <= dmax:
-                try:
-                    z_idx = prob.variables.get_indices(f"z_{i}_{j}")
-                    y_idx = prob.variables.get_indices(f"y_{i}")
-                    prob.linear_constraints.add(
-                        lin_expr=[cplex.SparsePair(ind=[z_idx, y_idx], val=[1, -1])],
-                        senses=["L"],
-                        rhs=[0],
-                        names=[f"repartidor_desde_parada_{i}_{j}"]
-                    )
-                except:
-                    pass
-
-    # 3. Refrigerados: como máximo 1 cliente refrigerado a pie/bici por parada
-    for i in range(n):
-        ind = []
-        for j in refrigerados:
-            if i != j and instancia.distancias[i][j] <= dmax:
-                try:
-                    ind.append(prob.variables.get_indices(f"z_{i}_{j}"))
-                except:
-                    pass
-        if ind:
-            prob.linear_constraints.add(
-                lin_expr=[cplex.SparsePair(ind=ind, val=[1] * len(ind))],
-                senses=["L"],
-                rhs=[1],
-                names=[f"max_refrigerado_{i}"]
-            )
-
-    # 4. Clientes que deben ser visitados por el camión
-    for i in exclusivos:
-        idx = prob.variables.get_indices(f"y_{i}")
+    # 2. El camión pasa a lo sumo una vez por cliente
+    for k in range(n):
+        nombres = [f"VC_{k}_{j}" for j in range(n) if j != k]
         prob.linear_constraints.add(
-            lin_expr=[cplex.SparsePair(ind=[idx], val=[1])],
-            senses=["E"],
+            lin_expr=[SparsePair(nombres, [1] * len(nombres))],
+            senses=["L"],
             rhs=[1],
-            names=[f"camion_visita_exclusivo_{i}"]
+            names=[f"camion_una_vez_{k}"]
         )
 
-   # 5. Si se contrata un repartidor en i, debe hacer al menos 4 entregas
+    # 3. Bicicleta solo si el cliente fue atendido por camión
+    for k in range(n):
+        izquierda = [f"VB_{i}_{k}" for i in range(n) if i != k]
+        derecha = [f"VC_{k}_{j}" for j in range(n) if j != k]
+        prob.linear_constraints.add(
+            lin_expr=[SparsePair(izquierda + derecha, [1] * len(izquierda) + [-1] * len(derecha))],
+            senses=["L"],
+            rhs=[0],
+            names=[f"bici_si_camion_{k}"]
+        )
+
+    # 4. Distancia máxima bici
     for i in range(n):
-        ind = []
-        val = []
-
         for j in range(n):
-            if i != j and instancia.distancias[i][j] <= dmax:
-                try:
-                    ind.append(prob.variables.get_indices(f"z_{i}_{j}"))
-                    val.append(1)
-                except:
-                    pass
-
-        if ind:
-            try:
-                r_idx = prob.variables.get_indices(f"r_{i}")
-                ind.append(r_idx)
-                val.append(-4)
+            if i != j and d[i][j] > dist_max:
                 prob.linear_constraints.add(
-                    lin_expr=[cplex.SparsePair(ind=ind, val=val)],
-                    senses=["G"],
+                    lin_expr=[SparsePair([f"VB_{i}_{j}"], [1])],
+                    senses=["E"],
                     rhs=[0],
-                    names=[f"min_4_entregas_r_{i}"]
+                    names=[f"dist_max_bici_{i}_{j}"]
                 )
-            except:
-                pass
 
-    # 6. Solo puede haber repartidor si el camión paró
+    # 5. Cada cliente es visitado una sola vez (camión o bici)
+    for j in range(1, n):
+        nombres = [f"VC_{i}_{j}" for i in range(n) if i != j] + [f"VB_{i}_{j}" for i in range(n) if i != j]
+        prob.linear_constraints.add(
+            lin_expr=[SparsePair(nombres, [1] * len(nombres))],
+            senses=["E"],
+            rhs=[1],
+            names=[f"visita_unica_{j}"]
+        )
+
+    # 6. MTZ: evitar ciclos disjuntos
+    for i in range(1, n):
+        for j in range(1, n):
+            if i != j:
+                prob.linear_constraints.add(
+                    lin_expr=[SparsePair([f"u_{i}", f"u_{j}", f"VC_{i}_{j}"], [1.0, -1.0, float(n)])],
+                    senses=["L"],
+                    rhs=[n - 1],
+                    names=[f"MTZ_{i}_{j}"]
+                )
+
+    # 7. Restricción de cantidad de bicis
+    nombres = []
+    coefs = []
     for i in range(n):
-        try:
-            r_idx = prob.variables.get_indices(f"r_{i}")
-            y_idx = prob.variables.get_indices(f"y_{i}")
-            prob.linear_constraints.add(
-                lin_expr=[cplex.SparsePair(ind=[r_idx, y_idx], val=[1, -1])],
-                senses=["L"],
-                rhs=[0],
-                names=[f"repartidor_si_camion_para_{i}"]
-            )
-        except:
-            pass
+        for j in refrigerados:
+            if i != j:
+                nombres.append(f"VB_{i}_{j}")
+                coefs.append(1)
+    nombres.append("cant_bicis")
+    coefs.append(-1)
+    prob.linear_constraints.add(
+        lin_expr=[SparsePair(nombres, coefs)],
+        senses=["L"],
+        rhs=[0],
+        names=["cantidad_bicis"]
+    )
+
+def agregar_funcion_objetivo(prob, instancia):
+    n = instancia.cant_clientes
+    obj_names = []
+    obj_coefs = []
+
+    for i in range(n):
+        for j in range(n):
+            if i != j:
+                obj_names.append(f"VC_{i}_{j}")
+                obj_coefs.append(instancia.costos[i][j])
+
+                obj_names.append(f"VB_{i}_{j}")
+                obj_coefs.append(instancia.costo_repartidor)
+
+    obj_names.append("cant_bicis")
+    obj_coefs.append(0.0)  # no tiene costo
+
+    prob.objective.set_sense(prob.objective.sense.minimize)
+    prob.objective.set_linear(list(zip(obj_names, obj_coefs)))
 
 def armar_lp(prob, instancia):
 
@@ -236,16 +202,12 @@ def armar_lp(prob, instancia):
     agregar_restricciones(prob, instancia)
 
     # Setear el sentido del problema
-    prob.objective.set_sense(prob.objective.sense.minimize)
+    agregar_funcion_objetivo(prob,instancia)
 
     # Escribir el lp a archivo
     prob.write('recorridoMixto.lp')
 
 def resolver_lp(prob):
-    # Parámetros del solver (algunos son opcionales)
-    prob.parameters.timelimit.set(60)  # Máximo 60 segundos
-    prob.parameters.mip.tolerances.mipgap.set(0.01)  # 1% de gap
-    prob.parameters.output.writelevel.set(0)  # Silencia la salida
 
     # Resolver el problema
     prob.solve()
