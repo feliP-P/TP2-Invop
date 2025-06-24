@@ -157,21 +157,20 @@ def agregar_restricciones(prob, instancia):
                 )
 
     # 7. Restricción de cantidad de bicis
-    nombres = []
-    coefs = []
     for i in range(n):
+        nombres=[]
+        coefs=[]
         for j in refrigerados:
             if i != j:
                 nombres.append(f"VB_{i}_{j}")
                 coefs.append(1)
-    nombres.append("cant_bicis")
-    coefs.append(-1)
-    prob.linear_constraints.add(
-        lin_expr=[SparsePair(nombres, coefs)],
-        senses=["L"],
-        rhs=[0],
-        names=["cantidad_bicis"]
-    )
+        prob.linear_constraints.add(
+            lin_expr=[SparsePair(nombres,coefs)],
+            senses=["L"],
+            rhs = [1],
+            names = ["productos_refrigerados"]
+        )
+
     # 8. Clientes que deben ser visitados por el camión
     for j in instancia.exclusivos:
         nombres = [f"VC_{i}_{j-1}" for i in range(instancia.cant_clientes) if i != (j - 1)]
