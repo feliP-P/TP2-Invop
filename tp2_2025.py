@@ -197,7 +197,7 @@ def agregar_restricciones(prob, instancia):
         prob.linear_constraints.add(
             lin_expr =[SparsePair(nombres,coefs)],
             senses=["L"],
-            rhs = [0]
+            rhs = [0],
             names=["delta1SiHayEntrega"]
         )
 
@@ -214,7 +214,7 @@ def agregar_restricciones(prob, instancia):
         prob.linear_constraints.add(
             lin_expr =[SparsePair(nombres,coefs)],
             senses=["U"],
-            rhs = [0]
+            rhs = [0],
             names=["delta0SiNoHayEntrega"]
         )
  
