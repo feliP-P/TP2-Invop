@@ -157,21 +157,20 @@ def agregar_restricciones(prob, instancia):
                 )
 
     # 7. Restricción de cantidad de bicis
-    nombres = []
-    coefs = []
     for i in range(n):
+        nombres=[]
+        coefs=[]
         for j in refrigerados:
             if i != j:
                 nombres.append(f"VB_{i}_{j}")
                 coefs.append(1)
-    nombres.append("cant_bicis")
-    coefs.append(-1)
-    prob.linear_constraints.add(
-        lin_expr=[SparsePair(nombres, coefs)],
-        senses=["L"],
-        rhs=[0],
-        names=["cantidad_bicis"]
-    )
+        prob.linear_constraints.add(
+            lin_expr=[SparsePair(nombres,coefs)],
+            senses=["L"],
+            rhs = [1],
+            names = ["productos_refrigerados"]
+        )
+
     # 8. Clientes que deben ser visitados por el camión
     for j in instancia.exclusivos:
         nombres = [f"VC_{i}_{j-1}" for i in range(instancia.cant_clientes) if i != (j - 1)]
@@ -183,35 +182,42 @@ def agregar_restricciones(prob, instancia):
         )
     
     # 9. Cada bici hace a lo sumo 4 viajes
-    nombres = []
-    coefs = []
-
-    for i in range(instancia.cant_clientes):
-        for j in range(instancia.cant_clientes):
+    for i in range(n):
+        
+        #9.1
+        nombres = []
+        coefs = []
+        nombres.append(f"delta_{i}")
+        coefs.append(-n)
+        for j in range(n):
             if i != j:
                 nombres.append(f"VB_{i}_{j}")
                 coefs.append(1)
+        
+        prob.linear_constraints.add(
+            lin_expr =[SparsePair(nombres,coefs)],
+            senses=["L"],
+            rhs = [0],
+            names=["delta1SiHayEntrega"]
+        )
 
-    nombres.append("cant_bicis")
-    coefs.append(-4)
-
-    prob.linear_constraints.add(
-        lin_expr=[SparsePair(nombres, coefs)],
-        senses=["L"],
-        rhs=[0],
-        names=["max_viajes_bici"]
-    )
-
-    '''# Restriccion de aristas inexistentes
-    for i in range(n):
+        #9.2
+        nombres = []
+        coefs = []
+        nombres.append(f"delta_{i}")
+        coefs.append(-4)
         for j in range(n):
-            if i != j and instancia.costos[i][j] >= 1000000:
-                prob.linear_constraints.add(
-                    lin_expr=[SparsePair([f"VC_{i}_{j}"], [1])],
-                    senses=["E"],
-                    rhs=[0],
-                    names=[f"bloquear_arista_{i}_{j}"]
-                )'''
+            if i != j:
+                nombres.append(f"VB_{i}_{j}")
+                coefs.append(1)
+        
+        prob.linear_constraints.add(
+            lin_expr =[SparsePair(nombres,coefs)],
+            senses=["U"],
+            rhs = [0],
+            names=["delta0SiNoHayEntrega"]
+        )
+ 
  
 
 def agregar_funcion_objetivo(prob, instancia):
