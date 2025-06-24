@@ -79,12 +79,14 @@ def agregar_variables(prob, instancia):
     prob.variables.add(names=nombres_vc, types=['B'] * len(nombres_vc))
     prob.variables.add(names=nombres_vb, types=['B'] * len(nombres_vb))
 
-    # Variable cant_bicis
-    prob.variables.add(names=["cant_bicis"], types=["I"], lb=[0])
-
     # Variables u_i (orden de visita)
     nombres_u = [f"u_{i}" for i in range(1, n)]
     prob.variables.add(names=nombres_u, lb=[1.0] * (n - 1), ub=[float(n)] * (n - 1), types=["C"] * (n - 1))
+
+    # Variables delta_i (binarias, indican si una bici fue usada o no)
+    nombres_delta = [f"delta_{i}" for i in range(n)]
+    prob.variables.add(names=nombres_delta, types=["B"] * n)
+
 
 def agregar_restricciones(prob, instancia):
     n = instancia.cant_clientes
@@ -168,7 +170,7 @@ def agregar_restricciones(prob, instancia):
             lin_expr=[SparsePair(nombres,coefs)],
             senses=["L"],
             rhs = [1],
-            names = ["productos_refrigerados"]
+            names = [f"productos_refrigerados_{i}"]
         )
 
     # 8. Clientes que deben ser visitados por el camión
@@ -198,7 +200,7 @@ def agregar_restricciones(prob, instancia):
             lin_expr =[SparsePair(nombres,coefs)],
             senses=["L"],
             rhs = [0],
-            names=["delta1SiHayEntrega"]
+            names=[f"delta1SiHayEntrega_{i}"]
         )
 
         #9.2
@@ -213,9 +215,9 @@ def agregar_restricciones(prob, instancia):
         
         prob.linear_constraints.add(
             lin_expr =[SparsePair(nombres,coefs)],
-            senses=["U"],
+            senses=["G"],
             rhs = [0],
-            names=["delta0SiNoHayEntrega"]
+            names=[f"delta0SiNoHayEntrega_{i}"]
         )
  
  
@@ -233,9 +235,6 @@ def agregar_funcion_objetivo(prob, instancia):
 
                 obj_names.append(f"VB_{i}_{j}")
                 obj_coefs.append(instancia.costo_repartidor)
-
-    obj_names.append("cant_bicis")
-    obj_coefs.append(0.0)  # no tiene costo
 
     prob.objective.set_sense(prob.objective.sense.minimize)
     prob.objective.set_linear(list(zip(obj_names, obj_coefs)))
