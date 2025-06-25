@@ -82,7 +82,9 @@ def agregar_variables(prob, instancia):
     # Variables u_i (orden de visita)
     nombres_u = [f"u_{i}" for i in range(1, n)]
     prob.variables.add(names=nombres_u, lb=[1.0] * (n - 1), ub=[float(n)] * (n - 1), types=["C"] * (n - 1))
-
+    # variable u_0 = 0 (se empieza recorrido en deposito)
+    porb.variables.add(names=["u_0"], lb=[0], ub=[0],type=["C"])
+    
     # Variables delta_i (binarias, indican si una bici fue usada o no)
     nombres_delta = [f"delta_{i}" for i in range(n)]
     prob.variables.add(names=nombres_delta, types=["B"] * n)
@@ -152,11 +154,44 @@ def agregar_restricciones(prob, instancia):
         for j in range(1, n):
             if i != j:
                 prob.linear_constraints.add(
-                    lin_expr=[SparsePair([f"u_{i}", f"u_{j}", f"VC_{i}_{j}"], [1.0, -1.0, float(n)])],
+                    lin_expr=[SparsePair([f"u_{i}", f"u_{j}", f"VC_{i}_{j}"], [1.0, -1.0, float(n-1)])],
                     senses=["L"],
-                    rhs=[n - 1],
+                    rhs=[n - 2],
                     names=[f"MTZ_{i}_{j}"]
                 )
+        #6.b posición de las ciudades. Agregamos cota inferior y superior si se usa, o igualamos a cero caso contrario
+        nombres = []
+        coefsi = []
+        coefss = []
+        nombres.append(f"u_{i}")
+        coefsi.append(1)
+        coefss.append(1)
+        for j in range(n):
+          if i != j:
+            nombres.append(f"VC_{i}_{j}")
+            coefsi.append(-1)
+            coefss.append(-n+1)
+
+        prob.linear_constraints.add(
+          lin_expr=[SparsePair(nombres, coefsi)],
+          senses=["G"],
+          rhs=[0],
+          names=[f"cota_inferior_u_{i}"]
+        )
+        prob.linear_constraints.add(
+          lin_expr=[SparsePair(nombres, coefss)],
+          senses=["L"],
+          rhs=[0],
+          names=[f"cota_superior_u_{i}"]
+        )
+    #6.c Deposito (nodo 0) visitado obligatoriamente por camión:
+    nombres = [f"VC_{i}_{0}" for i in range(n) if i != (0)]
+    prob.linear_constraints.add(
+            lin_expr=[SparsePair(nombres, [1] * len(nombres))],
+            senses=["E"],  # igual que
+            rhs=[1],
+            names=[f"camion_obligatorio_{0}"]
+        )
 
     # 7. Restricción de cantidad de bicis
     for i in range(n):
