@@ -4,7 +4,7 @@ import cplex
 from cplex import SparsePair
 
 
-TOLERANCE =10e-6 
+TOLERANCE =10e-6
 
 class InstanciaRecorridoMixto:
     def __init__(self):
@@ -13,8 +13,8 @@ class InstanciaRecorridoMixto:
         self.d_max = 0
         self.refrigerados = []
         self.exclusivos = []
-        self.distancias = []        
-        self.costos = []        
+        self.distancias = []
+        self.costos = []
 
     def leer_datos(self,filename):
         # abrimos el archivo de datos
@@ -26,23 +26,23 @@ class InstanciaRecorridoMixto:
         self.costo_repartidor = int(f.readline())
         # leemos la distamcia maxima del repartidor
         self.d_max = int(f.readline())
-        
+
         # inicializamos distancias y costos con un valor muy grande (por si falta algun par en los datos)
         self.distancias = [[1000000 for _ in range(self.cant_clientes)] for _ in range(self.cant_clientes)]
         self.costos = [[1000000 for _ in range(self.cant_clientes)] for _ in range(self.cant_clientes)]
-        
+
         # leemos la cantidad de refrigerados
         cantidad_refrigerados = int(f.readline())
         # leemos los clientes refrigerados
         for i in range(cantidad_refrigerados):
             self.refrigerados.append(int(f.readline()))
-        
+
         # leemos la cantidad de exclusivos
         cantidad_exclusivos = int(f.readline())
         # leemos los clientes exclusivos
         for i in range(cantidad_exclusivos):
             self.exclusivos.append(int(f.readline()))
-        
+
         # leemos las distancias y costos entre clientes
         lineas = f.readlines()
         for linea in lineas:
@@ -51,16 +51,16 @@ class InstanciaRecorridoMixto:
             self.distancias[row[1]-1][row[0]-1] = row[2]
             self.costos[row[0]-1][row[1]-1] = row[3]
             self.costos[row[1]-1][row[0]-1] = row[3]
-        
+
         # cerramos el archivo
         f.close()
 
 def cargar_instancia():
     # El 1er parametro es el nombre del archivo de entrada
-    nombre_archivo = sys.argv[1].strip()
+    nombre_archivo = "/instancia.txt" #sys.argv[1].strip()
     # Crea la instancia vacia
     instancia = InstanciaRecorridoMixto()
-    # Llena la instancia con los datos del archivo de entrada 
+    # Llena la instancia con los datos del archivo de entrada
     instancia.leer_datos(nombre_archivo)
     return instancia
 
@@ -80,7 +80,9 @@ def agregar_variables(prob, instancia):
     prob.variables.add(names=nombres_vb, types=['B'] * len(nombres_vb))
 
     # Variable cant_bicis
-    prob.variables.add(names=["cant_bicis"], types=["I"], lb=[0])
+    #prob.variables.add(names=["cant_bicis"], types=["I"], lb=[0])
+    nombres_delta = [f"Delta_{i}" for i in range(n)]
+    prob.variables.add(names=nombres_delta, types=["B"] * n)
 
     # Variables u_i (orden de visita)
     nombres_u = [f"u_{i}" for i in range(1, n)]
@@ -180,45 +182,44 @@ def agregar_restricciones(prob, instancia):
             rhs=[1],
             names=[f"camion_obligatorio_{j}"]
         )
-    
+
     # 9. Cada bici hace a lo sumo 4 viajes
     for i in range(n):
-        
+
         #9.1
         nombres = []
         coefs = []
-        nombres.append(f"delta_{i}")
+        nombres.append(f"Delta_{i}")
         coefs.append(-n)
         for j in range(n):
             if i != j:
                 nombres.append(f"VB_{i}_{j}")
                 coefs.append(1)
-        
+
         prob.linear_constraints.add(
             lin_expr =[SparsePair(nombres,coefs)],
             senses=["L"],
             rhs = [0],
             names=["delta1SiHayEntrega"]
         )
-
         #9.2
         nombres = []
         coefs = []
-        nombres.append(f"delta_{i}")
+        nombres.append(f"Delta_{i}")
         coefs.append(-4)
         for j in range(n):
             if i != j:
                 nombres.append(f"VB_{i}_{j}")
                 coefs.append(1)
-        
+
         prob.linear_constraints.add(
             lin_expr =[SparsePair(nombres,coefs)],
-            senses=["U"],
+            senses=["G"],
             rhs = [0],
             names=["delta0SiNoHayEntrega"]
         )
- 
- 
+
+
 
 def agregar_funcion_objetivo(prob, instancia):
     n = instancia.cant_clientes
@@ -234,8 +235,8 @@ def agregar_funcion_objetivo(prob, instancia):
                 obj_names.append(f"VB_{i}_{j}")
                 obj_coefs.append(instancia.costo_repartidor)
 
-    obj_names.append("cant_bicis")
-    obj_coefs.append(0.0)  # no tiene costo
+    #obj_names.append("cant_bicis")
+    #obj_coefs.append(0.0)  # no tiene costo
 
     prob.objective.set_sense(prob.objective.sense.minimize)
     prob.objective.set_linear(list(zip(obj_names, obj_coefs)))
@@ -244,8 +245,8 @@ def armar_lp(prob, instancia):
 
     # Agregar las variables
     agregar_variables(prob, instancia)
-   
-    # Agregar las restricciones 
+
+    # Agregar las restricciones
     agregar_restricciones(prob, instancia)
 
     # Setear el sentido del problema
@@ -260,17 +261,17 @@ def resolver_lp(prob):
     prob.solve()
 
 def mostrar_solucion(prob,instancia):
-    
+
     # Obtener informacion de la solucion a traves de 'solution'
-    
+
     # Tomar el estado de la resolucion
     status = prob.solution.get_status_string(status_code = prob.solution.get_status())
-    
+
     # Tomar el valor del funcional
     valor_obj = prob.solution.get_objective_value()
-    
+
     print('Funcion objetivo: ',valor_obj,'(' + str(status) + ')')
-    
+
     # Tomar los valores de las variables
     x  = prob.solution.get_values()
     nombres = prob.variables.get_names()
@@ -289,13 +290,13 @@ def mostrar_solucion(prob,instancia):
             print(f"  {nombre}: {valor:.1f}")
 
 def main():
-    
+
     # Lectura de datos desde el archivo de entrada
     instancia = cargar_instancia()
-    
+
     # Definicion del problema de Cplex
     prob = cplex.Cplex()
-    
+
     # Definicion del modelo
     armar_lp(prob,instancia)
 
