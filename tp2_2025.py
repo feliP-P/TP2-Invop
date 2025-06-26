@@ -140,7 +140,7 @@ def agregar_restricciones(prob, instancia):
                 )
 
     # 5. Cada cliente es visitado una sola vez (camión o bici)
-    for j in range(1, n):
+    for j in range(n):
         nombres = [f"VC_{i}_{j}" for i in range(n) if i != j] + [f"VB_{i}_{j}" for i in range(n) if i != j]
         prob.linear_constraints.add(
             lin_expr=[SparsePair(nombres, [1] * len(nombres))],
