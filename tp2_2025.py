@@ -213,7 +213,7 @@ def agregar_restricciones(prob, instancia):
         nombres = [f"VC_{i}_{j-1}" for i in range(instancia.cant_clientes) if i != (j - 1)]
         prob.linear_constraints.add(
             lin_expr=[SparsePair(nombres, [1] * len(nombres))],
-            senses=["G"],  # Mayor o igual que
+            senses=["E"],  # Igual que
             rhs=[1],
             names=[f"camion_obligatorio_{j}"]
         )
