@@ -97,7 +97,7 @@ def agregar_restricciones(prob, instancia):
     refrigerados = instancia.refrigerados
 
     # 1. Conservación de flujo del camión
-    for k in range(1, n):
+    for k in range(n):
         entrada = [f"VC_{i}_{k}" for i in range(n) if i != k]
         salida = [f"VC_{k}_{j}" for j in range(n) if j != k]
         prob.linear_constraints.add(
