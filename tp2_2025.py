@@ -81,7 +81,7 @@ def agregar_variables(prob, instancia):
 
     # Variables u_i (orden de visita)
     nombres_u = [f"u_{i}" for i in range(1, n)]
-    prob.variables.add(names=nombres_u, lb=[1.0] * (n - 1), ub=[float(n)] * (n - 1), types=["C"] * (n - 1))
+    prob.variables.add(names=nombres_u, lb=[0] * (n - 1), ub=[float(n)] * (n - 1), types=["C"] * (n - 1))
     # variable u_0 = 0 (se empieza recorrido en deposito)
     prob.variables.add(names=["u_0"], lb=[0], ub=[0],types=["C"])
     
