@@ -85,7 +85,7 @@ def agregar_restricciones(prob, instancia):
     n = instancia.cant_clientes
 
     # 1. Conservación de flujo del camión
-    for k in range(1, n):
+    for k in range(n):
         entrada = [f"VC_{i}_{k}" for i in range(n) if i != k]
         salida = [f"VC_{k}_{j}" for j in range(n) if j != k]
         prob.linear_constraints.add(
@@ -95,18 +95,8 @@ def agregar_restricciones(prob, instancia):
             names=[f"flujo_camion_{k}"]
         )
 
-    # 2. El camión pasa a lo sumo una vez por cliente
-    for k in range(n):
-        nombres = [f"VC_{k}_{j}" for j in range(n) if j != k]
-        prob.linear_constraints.add(
-            lin_expr=[SparsePair(nombres, [1] * len(nombres))],
-            senses=["L"],
-            rhs=[1],
-            names=[f"camion_una_vez_{k}"]
-        )
-
     # 3. Cada cliente es visitado una sola vez (ahora solo con VC)
-    for j in range(1, n):
+    for j in range(n):
         nombres = [f"VC_{i}_{j}" for i in range(n) if i != j]
         prob.linear_constraints.add(
             lin_expr=[SparsePair(nombres, [1] * len(nombres))],
